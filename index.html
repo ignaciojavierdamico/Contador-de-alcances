@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Contador de Alcances</title>
+<style>
+* {
+    -webkit-tap-highlight-color: transparent;
+    box-sizing: border-box;
+}
+html, body {
+    height: 100%;
+}
+body{
+    font-family:-apple-system, Arial, Helvetica, sans-serif;
+    max-width:500px;
+    margin:auto;
+    padding:20px;
+    padding-top: calc(20px + env(safe-area-inset-top));
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
+    background:#f4f4f4;
+    -webkit-text-size-adjust: 100%;
+}
+h2{
+    text-align:center;
+    margin-bottom: 5px;
+}
+#estadoConexion{
+    text-align:center;
+    font-size:14px;
+    margin-bottom:15px;
+    padding:6px;
+    border-radius:6px;
+    font-weight:bold;
+}
+.online{
+    background:#e0f2e9;
+    color:#1e7d43;
+}
+.offline{
+    background:#fdecea;
+    color:#b3261e;
+}
+label{
+    display:block;
+    margin-top:15px;
+    font-weight:bold;
+}
+input,select{
+    width:100%;
+    padding:12px;
+    font-size:16px;
+    margin-top:5px;
+    box-sizing:border-box;
+    border:1px solid #ccc;
+    border-radius:6px;
+    background:white;
+    -webkit-appearance: none;
+    appearance: none;
+}
+select{
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23333' d='M7 10l5 5 5-5z'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 18px;
+    padding-right: 35px;
+}
+button{
+    width:100%;
+    padding:18px;
+    margin-top:25px;
+    font-size:22px;
+    border:none;
+    border-radius:8px;
+    background:#1976D2;
+    color:white;
+    cursor:pointer;
+    -webkit-appearance: none;
+    touch-action: manipulation;
+}
+button:active{
+    background:#125ea8;
+}
+button:disabled{
+    background:#90a4c9;
+}
+#panel{
+    margin-top:30px;
+    border-top:2px solid #ddd;
+    padding-top:20px;
+}
+#contador{
+    font-size:22px;
+    font-weight:bold;
+    color:#1976D2;
+}
+#pendientes{
+    font-size:14px;
+    color:#b3261e;
+    margin-top:5px;
+    font-weight:bold;
+}
+#ultimo{
+    margin-top:15px;
+    padding:15px;
+    background:white;
+    border-radius:8px;
+    line-height:1.5;
+}
+</style>
+</head>
+<body>
+<h2>Contador de Alcances</h2>
+<div id="estadoConexion">Verificando conexión...</div>
+
+<label>Usuario</label>
+<input id="usuario" placeholder="Ej.: Ignacio" autocapitalize="words" autocomplete="off">
+<label>Operativo</label>
+<select id="operativo">
+    <option value="MSETB">MSETB</option>
+    <option value="ES">ES</option>
+</select>
+<label>Ubicación</label>
+<input id="ubicacion" placeholder="Ej.: Plaza Belgrano" autocapitalize="words" autocomplete="off">
+<label>Género</label>
+<select id="genero">
+    <option value="Femenino">Femenino</option>
+    <option value="Masculino">Masculino</option>
+    <option value="X">X</option>
+</select>
+<label>Rango etario</label>
+<select id="edad">
+    <option value="Joven">Joven</option>
+    <option value="Adulto">Adulto</option>
+    <option value="Adulto mayor">Adulto mayor</option>
+</select>
+<button id="btnRegistrar" onclick="registrar()">
++1 PERSONA
+</button>
+<div id="panel">
+<div id="contador">Total registrados: 0</div>
+<div id="pendientes"></div>
+<div id="ultimo">Todavía no hay registros.</div>
+</div>
+
+<script>
+const URL="https://script.google.com/macros/s/AKfycbxpMiEFfLejJ6-FQeGA4hxnxlhR62ZoqN2UwNhXJl-_bO9FzNkMKXoSifSkQxCpM_Ff/exec";
+
+const CLAVE_COLA = "alcances_cola_pendiente";
+const CLAVE_CONTADOR = "alcances_total_contador";
+
+function leerCola(){
+    try{
+        return JSON.parse(localStorage.getItem(CLAVE_COLA)) || [];
+    }catch(e){
+        return [];
+    }
+}
+
+function guardarCola(cola){
+    localStorage.setItem(CLAVE_COLA, JSON.stringify(cola));
+}
+
+function leerContador(){
+    return parseInt(localStorage.getItem(CLAVE_CONTADOR) || "0", 10);
+}
+
+function guardarContador(valor){
+    localStorage.setItem(CLAVE_CONTADOR, String(valor));
+}
+
+function actualizarPanel(){
+    const total = leerContador();
+    const cola = leerCola();
+    document.getElementById("contador").innerHTML = "Total registrados: " + total;
+    document.getElementById("pendientes").innerText =
+        cola.length > 0 ? `⏳ ${cola.length} registro(s) sin enviar (se mandan solos al volver la señal)` : "";
+}
+
+function actualizarEstadoConexion(){
+    const div = document.getElementById("estadoConexion");
+    if(navigator.onLine){
+        div.innerText = "🟢 Con conexión";
+        div.className = "online";
+    }else{
+        div.innerText = "🔴 Sin conexión — los registros se guardan igual";
+        div.className = "offline";
+    }
+}
+
+async function registrar(){
+    const boton = document.getElementById("btnRegistrar");
+    const datos = {
+        usuario: document.getElementById("usuario").value,
+        ubicacion: document.getElementById("ubicacion").value,
+        genero: document.getElementById("genero").value,
+        rango: document.getElementById("edad").value,
+        operativo: document.getElementById("operativo").value,
+        fechaLocal: new Date().toISOString()
+    };
+
+    // Se guarda local YA, pase lo que pase con la red
+    const cola = leerCola();
+    cola.push(datos);
+    guardarCola(cola);
+
+    const total = leerContador() + 1;
+    guardarContador(total);
+
+    document.getElementById("ultimo").innerHTML = `
+        <h3>Último registro</h3>
+        <b>Fecha:</b> ${new Date().toLocaleString("es-AR")}<br>
+        <b>Usuario:</b> ${datos.usuario}<br>
+        <b>Operativo:</b> ${datos.operativo}<br>
+        <b>Ubicación:</b> ${datos.ubicacion}<br>
+        <b>Género:</b> ${datos.genero}<br>
+        <b>Rango etario:</b> ${datos.rango}<br><br>
+        <span style="color:#1e7d43;font-weight:bold;">✔ Guardado en el celular</span>
+    `;
+
+    actualizarPanel();
+
+    // feedback rapido en el boton
+    boton.innerText = "✔ Guardado";
+    setTimeout(()=>{ boton.innerText = "+1 PERSONA"; }, 800);
+
+    // intenta sincronizar ya mismo si hay señal
+    sincronizar();
+}
+
+let sincronizando = false;
+
+async function sincronizar(){
+    if(sincronizando) return;
+    if(!navigator.onLine) return;
+
+    const cola = leerCola();
+    if(cola.length === 0) return;
+
+    sincronizando = true;
+
+    while(true){
+        const colaActual = leerCola();
+        if(colaActual.length === 0) break;
+
+        const registro = colaActual[0];
+
+        try{
+            await fetch(URL, {
+                method: "POST",
+                headers: { "Content-Type": "text/plain;charset=utf-8" },
+                body: JSON.stringify(registro)
+            });
+
+            // si no tiro error, se envio: lo sacamos de la cola
+            const colaSinEnviado = leerCola();
+            colaSinEnviado.shift();
+            guardarCola(colaSinEnviado);
+            actualizarPanel();
+
+        }catch(error){
+            // sin señal real o fallo de red: cortamos y reintentamos mas tarde
+            break;
+        }
+    }
+
+    sincronizando = false;
+}
+
+// Reintenta apenas vuelve la señal
+window.addEventListener("online", ()=>{
+    actualizarEstadoConexion();
+    sincronizar();
+});
+window.addEventListener("offline", actualizarEstadoConexion);
+
+// Reintenta cada 20 segundos por las dudas (a veces "online" no dispara bien en iOS)
+setInterval(sincronizar, 20000);
+
+// Al abrir la app
+actualizarEstadoConexion();
+actualizarPanel();
+sincronizar();
+</script>
+</body>
+</html>
